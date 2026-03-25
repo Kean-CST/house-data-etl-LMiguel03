@@ -17,6 +17,15 @@ from pathlib import Path
 from dotenv import load_dotenv  # noqa: F401
 from pyspark.sql import DataFrame, SparkSession  # noqa: F401
 from pyspark.sql import functions as F  # noqa: F401
+from pyspark.sql.types import (
+    BooleanType,
+    DateType,
+    DoubleType,
+    IntegerType,
+    StringType,
+    StructField,
+    StructType,
+)
 
 # ── Predefined constants (do not modify) ──────────────────────────────────────
 ROOT = Path(__file__).resolve().parent.parent
@@ -40,20 +49,73 @@ PG_COLUMN_SCHEMA = (
     "distance_downtown_miles NUMERIC(6,2), sale_date DATE, days_on_market INTEGER"
 )
 
+# Column names derived from PG_COLUMN_SCHEMA for the load step
+_PG_COLUMNS = [col.split()[0] for col in PG_COLUMN_SCHEMA.split(", ")]
+
+_CSV_SCHEMA = StructType([
+    StructField("house_id", StringType(), True),
+    StructField("neighborhood", StringType(), True),
+    StructField("price", IntegerType(), True),
+    StructField("square_feet", IntegerType(), True),
+    StructField("num_bedrooms", IntegerType(), True),
+    StructField("num_bathrooms", IntegerType(), True),
+    StructField("house_age", IntegerType(), True),
+    StructField("garage_spaces", IntegerType(), True),
+    StructField("lot_size_acres", DoubleType(), True),
+    StructField("has_pool", BooleanType(), True),
+    StructField("recently_renovated", BooleanType(), True),
+    StructField("energy_rating", StringType(), True),
+    StructField("location_score", IntegerType(), True),
+    StructField("school_rating", IntegerType(), True),
+    StructField("crime_rate", IntegerType(), True),
+    StructField("distance_downtown_miles", DoubleType(), True),
+    StructField("sale_date", DateType(), True),
+    StructField("days_on_market", IntegerType(), True),
+    StructField("buyer_id", StringType(), True),
+    StructField("buyer_budget", IntegerType(), True),
+    StructField("buyer_age_group", StringType(), True),
+    StructField("buyer_family_size", IntegerType(), True),
+    StructField("buyer_income_level", StringType(), True),
+    StructField("has_children", BooleanType(), True),
+    StructField("employment_type", StringType(), True),
+    StructField("buyer_preference", StringType(), True),
+    StructField("first_time_buyer", BooleanType(), True),
+])
+
 
 def extract(spark: SparkSession, csv_path: str) -> DataFrame:
     """Load the CSV dataset into a PySpark DataFrame with correct data types."""
-    raise NotImplementedError
+    return (
+        spark.read.csv(
+            csv_path,
+            header=True,
+            schema=_CSV_SCHEMA,
+            dateFormat="M/d/yy",
+        )
+    )
 
 
 def transform(df: DataFrame) -> dict[str, DataFrame]:
     """Split the data by neighborhood and save each as a separate CSV file."""
-    raise NotImplementedError
+    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    partitions: dict[str, DataFrame] = {}
+    for hood in NEIGHBORHOODS:
+        hood_df = df.filter(F.col("neighborhood") == hood).orderBy("house_id")
+        partitions[hood] = hood_df
+        # Write via pandas so booleans are True/False and dates are ISO-formatted
+        hood_df.toPandas().to_csv(OUTPUT_FILES[hood], index=False, float_format='%g')
+    return partitions
 
 
 def load(partitions: dict[str, DataFrame], jdbc_url: str, pg_props: dict) -> None:
     """Insert each neighborhood dataset into its own PostgreSQL table."""
-    raise NotImplementedError
+    for hood, hood_df in partitions.items():
+        hood_df.select(_PG_COLUMNS).write.jdbc(
+            url=jdbc_url,
+            table=PG_TABLES[hood],
+            mode="overwrite",
+            properties=pg_props,
+        )
 
 
 # ── Main (do not modify) ───────────────────────────────────────────────────────
