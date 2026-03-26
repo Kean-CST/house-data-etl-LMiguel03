@@ -102,8 +102,19 @@ def transform(df: DataFrame) -> dict[str, DataFrame]:
     for hood in NEIGHBORHOODS:
         hood_df = df.filter(F.col("neighborhood") == hood).orderBy("house_id")
         partitions[hood] = hood_df
-        # Write via pandas so booleans are True/False and dates are ISO-formatted
-        hood_df.toPandas().to_csv(OUTPUT_FILES[hood], index=False, float_format='%g')
+        # Write using built-in csv: booleans as True/False, floats with %g, dates as ISO
+        columns = hood_df.columns
+        rows = hood_df.collect()
+        with open(OUTPUT_FILES[hood], "w", newline="") as f:
+            writer = csv.writer(f)
+            writer.writerow(columns)
+            for row in rows:
+                writer.writerow(
+                    "" if val is None
+                    else f"{val:g}" if isinstance(val, float)
+                    else str(val)
+                    for val in row
+                )
     return partitions
 
 
