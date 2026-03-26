@@ -62,6 +62,25 @@ jobs:
       - name: Install Python dependencies
         run: pip install -r requirements.txt
 
+      - name: Cache PostgreSQL JDBC driver
+        uses: actions/cache@v4
+        with:
+          path: ~/.m2/repository/org/postgresql/postgresql/42.7.3
+          key: postgresql-jdbc-42.7.3
+
+      - name: Pre-download PostgreSQL JDBC driver
+        run: |
+          mkdir -p ~/.m2/repository/org/postgresql/postgresql/42.7.3
+          FILE=~/.m2/repository/org/postgresql/postgresql/42.7.3/postgresql-42.7.3.jar
+          if [ ! -f "$FILE" ]; then
+            curl -L --retry 3 \
+              https://repo1.maven.org/maven2/org/postgresql/postgresql/42.7.3/postgresql-42.7.3.jar \
+              -o "$FILE"
+            curl -L --retry 3 \
+              https://repo1.maven.org/maven2/org/postgresql/postgresql/42.7.3/postgresql-42.7.3.pom \
+              -o ~/.m2/repository/org/postgresql/postgresql/42.7.3/postgresql-42.7.3.pom
+          fi
+
       - name: Run ETL pipeline
         run: python src/etl_pipeline.py
 
